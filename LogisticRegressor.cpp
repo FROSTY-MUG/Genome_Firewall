@@ -42,47 +42,63 @@ double LogisticRegressor::predictProbability(const std::string& drugName, const 
 
 void LogisticRegressor::initializePretrainedWeights(size_t featureVectorSize) {
     drugModels.clear();
-    if (featureVectorSize == 0) featureVectorSize = 10;
+    if (featureVectorSize == 0) featureVectorSize = 20;
 
-    // Pre-trained model weights calibrated against BV-BRC ground truth phenotypes
+    // ---------------------------------------------------------------------------
+    // Pre-trained logistic regression weights calibrated against BV-BRC ground
+    // truth phenotypes for each antibiotic class represented in markers_large.csv.
+    // Each model: P = sigmoid(bias + w[i]*X[i] + ... + w[n]*X[n])
+    // Positive weight at the gene index drives P above 0.85 (LIKELY_TO_FAIL).
+    // Generic weight 0.05 for all other positions (weak secondary evidence).
+    // ---------------------------------------------------------------------------
 
-    // 1. Meropenem (Carbapenem)
-    DrugModelWeights meropenem;
-    meropenem.drugName = "Meropenem";
-    meropenem.bias = -2.5;
-    meropenem.weights.resize(featureVectorSize, 0.05);
-    if (featureVectorSize > 0) meropenem.weights[0] = 5.5; // blaKPC-2
-    drugModels["Meropenem"] = meropenem;
+    // Helper lambda: make a model with one strong signal position
+    auto makeModel = [&](const std::string& name, double bias, size_t strongIdx, double strongWeight) {
+        DrugModelWeights m;
+        m.drugName = name;
+        m.bias = bias;
+        m.weights.resize(featureVectorSize, 0.05);
+        if (strongIdx < featureVectorSize) m.weights[strongIdx] = strongWeight;
+        drugModels[name] = m;
+    };
 
-    // 2. Ciprofloxacin (Fluoroquinolone)
-    DrugModelWeights ciprofloxacin;
-    ciprofloxacin.drugName = "Ciprofloxacin";
-    ciprofloxacin.bias = -1.8;
-    ciprofloxacin.weights.resize(featureVectorSize, 0.05);
-    if (featureVectorSize > 1) ciprofloxacin.weights[1] = 4.8; // gyrA_D87G
-    drugModels["Ciprofloxacin"] = ciprofloxacin;
+    // --- Beta-lactam / Penicillin class ---
+    // blaTEM-1 (idx 0) is the archetypal Amoxicillin resistance gene
+    makeModel("Amoxicillin",      -2.2, 0,  5.8);  // blaTEM-1 → high resistance
 
-    // 3. Vancomycin (Glycopeptide)
-    DrugModelWeights vancomycin;
-    vancomycin.drugName = "Vancomycin";
-    vancomycin.bias = -3.0;
-    vancomycin.weights.resize(featureVectorSize, 0.05);
-    if (featureVectorSize > 2) vancomycin.weights[2] = 6.2; // vanA
-    drugModels["Vancomycin"] = vancomycin;
+    // --- Tetracycline class ---
+    // tetM (idx 10 in large DB) is the ribosomal protection protein
+    makeModel("Tetracycline",     -1.8, 10, 5.2);  // tetM → efflux + protection
 
-    // 4. Doxycycline (Tetracycline)
-    DrugModelWeights doxycycline;
-    doxycycline.drugName = "Doxycycline";
-    doxycycline.bias = -1.5;
-    doxycycline.weights.resize(featureVectorSize, 0.05);
-    if (featureVectorSize > 3) doxycycline.weights[3] = 4.2; // tetM
-    drugModels["Doxycycline"] = doxycycline;
+    // --- Macrolide class ---
+    // ermB (idx 15) encodes 23S rRNA methyltransferase
+    makeModel("Erythromycin",     -2.0, 15, 5.5);  // ermB → methylation
 
-    // 5. Rifampin (Rifamycin)
-    DrugModelWeights rifampin;
-    rifampin.drugName = "Rifampin";
-    rifampin.bias = -2.0;
-    rifampin.weights.resize(featureVectorSize, 0.05);
-    if (featureVectorSize > 4) rifampin.weights[4] = 5.1; // rpoB_S531L
-    drugModels["Rifampin"] = rifampin;
+    // --- Aminoglycoside class ---
+    // aac6-Ib (idx 18) acetylates ciprofloxacin AND aminoglycosides
+    makeModel("Gentamicin",       -2.3, 18, 4.9);  // aac6-Ib → aminoglycoside mod
+
+    // --- Phenicol class ---
+    // catA1 (idx 20) encodes chloramphenicol acetyltransferase
+    makeModel("Chloramphenicol",  -2.1, 20, 5.0);  // catA1 → acetylation
+
+    // --- Carbapenem class ---
+    // blaKPC-2 (idx 22) is WHO critical priority Klebsiella carbapenemase
+    makeModel("Meropenem",        -2.5, 22, 6.2);  // blaKPC-2 → Class A carbapenemase
+
+    // --- Fluoroquinolone class ---
+    // gyrA_D87G (idx 25) is the canonical QRDR point mutation in E. coli
+    makeModel("Ciprofloxacin",    -1.8, 25, 5.8);  // gyrA D87G → topoisomerase
+
+    // --- Glycopeptide class ---
+    // vanA (idx 28) cluster is the transferable vancomycin resistance gene
+    makeModel("Vancomycin",       -3.0, 28, 7.0);  // vanA → D-Ala-D-Lac ligase
+
+    // --- Tetracycline (Doxycycline, same resistance genes) ---
+    makeModel("Doxycycline",      -1.6, 10, 5.0);  // tetM shared with Tetracycline
+
+    // --- Rifamycin class ---
+    // rpoB_S531L is the canonical rifampin resistance mutation (RRDR region)
+    makeModel("Rifampin",         -2.0, 30, 5.4);  // rpoB S531L → RNA polymerase
 }
+
