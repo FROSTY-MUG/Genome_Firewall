@@ -72,7 +72,7 @@ int main(int argc, char* argv[]) {
 
     printBanner();
     std::cout << "[*] System Mode: " << (enableFuzzy ? "Mutation-Tolerant (Hamming <= 1)" : "Exact Match Only (Hamming = 0)")
-              << " | " << (enableAsync ? "Multithreaded (std::async)" : "Sequential (Single-threaded)") << "\n";
+              << " | " << (enableAsync ? "Multithreaded (Native OS Threads)" : "Sequential (Single-threaded)") << "\n";
     std::cout << "[*] Confidence Threshold: " << confidenceThreshold << "%\n\n";
 
     auto totalStart = std::chrono::high_resolution_clock::now();

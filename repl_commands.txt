@@ -1,0 +1,9 @@
+status
+load_db markers_large.csv
+scan sample_real.fasta
+set_fuzzy on
+set_async on
+set_conf 70.0
+scan sample.fasta
+status
+exit
