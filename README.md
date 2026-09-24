@@ -105,19 +105,26 @@ make
 ```
 *Generates `genome_firewall` (or `genome_firewall.exe`) linking with `-pthread -O2`.*
 
-### 2. Execute — Standard Mode
+### 2. Execute — Easy Mode (Wrapper Script)
+We've included a highly optimized easy-to-use wrapper script that utilizes our dynamically trained dataset comprising 455 top AMR genes from the Comprehensive Antibiotic Resistance Database (CARD).
+```powershell
+# Windows:
+.\firewall-scan.bat sample_real.fasta
+```
+
+### 3. Execute — Standard CLI Mode
 ```bash
 # Default (Fuzzy + Multithreaded) with basic dataset:
-./genome_firewall sample.fasta markers.csv
+./genome_firewall --input sample.fasta --db markers.csv --fuzzy --async
 
-# Full real dataset — MDR E. coli vs 53-marker database:
-./genome_firewall --input sample_real.fasta --db markers_large.csv --fuzzy --async
+# Full real dataset — MDR E. coli vs 455-marker trained CARD database:
+./genome_firewall --input sample_real.fasta --db markers_card_top.csv --fuzzy --async
 
 # Exact-only + serial (useful for deterministic debugging):
 ./genome_firewall --input sample.fasta --db markers.csv --exact --serial
 ```
 
-### 3. Execute — Interactive REPL Shell
+### 4. Execute — Interactive REPL Shell
 ```bash
 ./genome_firewall --interactive
 ```
