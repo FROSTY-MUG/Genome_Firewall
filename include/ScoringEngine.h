@@ -4,33 +4,16 @@
 #include <string>
 #include <atomic>
 #include <vector>
+#include <deque>
 #include "AMRTrie.h"
 #include "PredictorEngine.h"
 #include "AMRDatabase.h"
-
-// ---------------------------------------------------------------------------
-// Cross-platform lightweight task handle wrapper
-// On Windows (MinGW 6.3) we use CreateThread instead of std::async/std::future
-// because MinGW.org's GCC 6.3 ships a broken <future>/<mutex>/<thread>.
-// ---------------------------------------------------------------------------
 
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
-
-struct AsyncTask {
-    HANDLE hThread{NULL};
-    bool valid() const { return hThread != NULL; }
-    void get() {
-        if (hThread) {
-            WaitForSingleObject(hThread, INFINITE);
-            CloseHandle(hThread);
-            hThread = NULL;
-        }
-    }
-};
 
 // Win32 CRITICAL_SECTION wrapper
 struct WinMutex {
@@ -50,18 +33,6 @@ struct WinLockGuard {
 #else
 // POSIX fallback (Linux/macOS)
 #include <pthread.h>
-
-struct AsyncTask {
-    pthread_t tid{0};
-    bool running{false};
-    bool valid() const { return running; }
-    void get() {
-        if (running) {
-            pthread_join(tid, NULL);
-            running = false;
-        }
-    }
-};
 
 struct WinMutex {
     pthread_mutex_t m;
@@ -83,7 +54,7 @@ class ScoringEngine {
 public:
     explicit ScoringEngine(const AMRTrie& trie, const AMRDatabase& db,
                            bool enableFuzzy = true, double confidenceThreshold = 75.0);
-    ~ScoringEngine() = default;
+    ~ScoringEngine();
 
     ScoringEngine(const ScoringEngine&) = delete;
     ScoringEngine& operator=(const ScoringEngine&) = delete;
@@ -114,23 +85,35 @@ private:
     // Thread-safe Binary Feature Vector X
     std::vector<std::atomic<int>> featureVectorAtomics;
 
-    std::vector<AsyncTask> asyncTasks;
-    mutable WinMutex       tasksMutex;
+    mutable WinMutex tasksMutex;
+    PredictorEngine  predictor;
 
-    PredictorEngine predictor;
-
-    // Thread entry struct for async dispatch
+    // Task queue struct for persistent worker thread pool
     struct ChunkTask {
-        ScoringEngine* engine;
-        std::string    sequence;
-        size_t         kmerLength;
+        std::string sequence;
+        size_t      kmerLength;
     };
 
+    std::deque<ChunkTask> taskQueue;
+    mutable WinMutex      queueMutex;
+    std::atomic<int>      activeTasksCount{0};
+    bool                  stopPool{false};
+
 #ifdef _WIN32
-    static DWORD WINAPI threadEntry(LPVOID param);
+    HANDLE                hWorkSemaphore{NULL};
+    HANDLE                hDoneEvent{NULL};
+    std::vector<HANDLE>   workerHandles;
+    static DWORD WINAPI   workerLoop(LPVOID param);
 #else
-    static void* threadEntry(void* param);
+    pthread_mutex_t       posixMutex;
+    pthread_cond_t        posixWorkCond;
+    pthread_cond_t        posixDoneCond;
+    std::vector<pthread_t> workerThreads;
+    static void*          workerLoop(void* param);
 #endif
+
+    void initThreadPool();
+    void shutdownThreadPool();
 };
 
 #endif // SCORING_ENGINE_H

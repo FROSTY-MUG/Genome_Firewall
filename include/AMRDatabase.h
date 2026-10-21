@@ -29,8 +29,9 @@ public:
     AMRDatabase() = default;
     ~AMRDatabase() = default;
 
-    // Bridged API to match your REPLShell and main.cpp exactly
+    // Bridged API to match REPLShell and main.cpp exactly
     void loadFromFile(const std::string& filepath, AMRTrie& trie);
+    void clear() { databaseRecords.clear(); }
     size_t getMarkerCount() const;
     const std::vector<AMRRecord>& getRecords() const;
 };

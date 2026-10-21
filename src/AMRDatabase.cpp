@@ -88,6 +88,7 @@ static std::string resolveDbPath(const std::string& filepath) {
 }
 
 void AMRDatabase::loadFromFile(const std::string& filepath, AMRTrie& trie) {
+    databaseRecords.clear();
     std::string actualPath = resolveDbPath(filepath);
     std::unique_ptr<IDatabaseParser> parser;
 
@@ -112,16 +113,19 @@ void AMRDatabase::loadFromFile(const std::string& filepath, AMRTrie& trie) {
     int added = 0;
     int kmerTotal = 0;
 
+    databaseRecords.reserve(newRecords.size());
+
     for (const auto& rec : newRecords) {
         if (rec.sequence.length() < KMER_LEN) continue;
 
         int recordIdx = static_cast<int>(databaseRecords.size());
         databaseRecords.push_back(rec);
 
-        // Index all overlapping 21-mers into Trie with record index
-        for (size_t i = 0; i <= rec.sequence.length() - KMER_LEN; ++i) {
-            std::string kmer = rec.sequence.substr(i, KMER_LEN);
-            trie.insertMarker(kmer, recordIdx);
+        // Index all overlapping 21-mers into Trie with zero-allocation pointer slices
+        const char* seqData = rec.sequence.data();
+        const size_t seqLen = rec.sequence.length();
+        for (size_t i = 0; i <= seqLen - KMER_LEN; ++i) {
+            trie.insertMarker(seqData + i, KMER_LEN, recordIdx);
             ++kmerTotal;
         }
         ++added;

@@ -16,6 +16,26 @@
 #include <unistd.h>
 #endif
 
+// Fast 256-byte branchless uppercase and whitespace lookup table
+static constexpr uint8_t initFastaCharMap(uint8_t c) {
+    return (c >= 'a' && c <= 'z') ? static_cast<uint8_t>(c - 32) :
+           (c > ' ') ? c : 0;
+}
+
+#define ROW16(base) \
+    initFastaCharMap(base+0),  initFastaCharMap(base+1),  initFastaCharMap(base+2),  initFastaCharMap(base+3),  \
+    initFastaCharMap(base+4),  initFastaCharMap(base+5),  initFastaCharMap(base+6),  initFastaCharMap(base+7),  \
+    initFastaCharMap(base+8),  initFastaCharMap(base+9),  initFastaCharMap(base+10), initFastaCharMap(base+11), \
+    initFastaCharMap(base+12), initFastaCharMap(base+13), initFastaCharMap(base+14), initFastaCharMap(base+15)
+
+static const uint8_t FASTA_CHAR_MAP[256] = {
+    ROW16(0),   ROW16(16),  ROW16(32),  ROW16(48),
+    ROW16(64),  ROW16(80),  ROW16(96),  ROW16(112),
+    ROW16(128), ROW16(144), ROW16(160), ROW16(176),
+    ROW16(192), ROW16(208), ROW16(224), ROW16(240)
+};
+#undef ROW16
+
 static std::string resolveFastaPath(const std::string& path) {
     std::ifstream test(path);
     if (test.good()) return path;
@@ -145,10 +165,9 @@ bool FastaMmapParser::getNextChunk(std::string& chunk, size_t maxChunkSize, size
                 continue;
             }
 
-            // Fast ASCII filter for DNA nucleotides
-            if (c > ' ') {
-                if (c >= 'a' && c <= 'z') c -= 32;
-                chunk.push_back(c);
+            uint8_t up = FASTA_CHAR_MAP[static_cast<uint8_t>(c)];
+            if (up) {
+                chunk.push_back(static_cast<char>(up));
             }
         }
     } else {
@@ -159,9 +178,9 @@ bool FastaMmapParser::getNextChunk(std::string& chunk, size_t maxChunkSize, size
                 std::getline(fallbackStream, headerLine);
                 continue;
             }
-            if (c > ' ') {
-                if (c >= 'a' && c <= 'z') c -= 32;
-                chunk.push_back(c);
+            uint8_t up = FASTA_CHAR_MAP[static_cast<uint8_t>(c)];
+            if (up) {
+                chunk.push_back(static_cast<char>(up));
             }
         }
     }

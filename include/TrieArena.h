@@ -11,7 +11,7 @@ struct TrieNode;
 // Arena Allocator for fast, cache-friendly allocation of TrieNodes
 class TrieArena {
 public:
-    explicit TrieArena(size_t blockCapacity = 8192);
+    explicit TrieArena(size_t blockCapacity = 65536);
     ~TrieArena();
 
     TrieArena(const TrieArena&) = delete;
@@ -35,6 +35,7 @@ private:
     size_t blockCapacity;
     size_t currentBlockIndex;
     size_t totalNodesAllocated;
+    TrieNode* currentBlockPtr{nullptr};
     std::vector<TrieNode*> blocks;
 };
 
