@@ -7,7 +7,9 @@ double LogisticRegressor::computeDotProduct(const std::vector<double>& weights, 
     double z = bias;
     size_t size = std::min(weights.size(), featureVector.size());
     for (size_t i = 0; i < size; ++i) {
-        z += weights[i] * featureVector[i];
+        if (featureVector[i]) {
+            z += weights[i];
+        }
     }
     return z;
 }
@@ -30,6 +32,8 @@ double LogisticRegressor::predictProbability(const std::string& drugName, const 
 }
 
 void LogisticRegressor::initializePretrainedWeights(size_t featureVectorSize) {
+    (void)featureVectorSize;
+    if (!drugModels.empty()) return;
     drugModels.clear();
     {
         DrugModelWeights model;
