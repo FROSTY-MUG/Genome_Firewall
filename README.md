@@ -242,43 +242,77 @@ make
 
 ### 2. Run the Verification Test Suite
 ```powershell
+# Windows (MinGW):
 mingw32-make test
+
+# Linux / macOS:
+make test
 ```
 
-### 3. Command-Line Options
-```
-Usage: genome_firewall --input <genome.fasta> --db <markers.csv> [options]
-       genome_firewall --interactive
-
-Options:
-  --input <file>        Input FASTA genome sequence file
-  --db <file>           AMR reference database CSV/TSV file
-  --fuzzy               Enable mutation-tolerant Hamming Distance <= 1 matching (default)
-  --exact               Force strict exact matching only (Hamming = 0)
-  --async               Enable concurrent multithreaded chunk processing (default)
-  --serial              Run single-threaded sequential scoring
-  --confidence <val>    Set prediction confidence threshold percentage (default: 75.0)
-  --interactive         Launch interactive REPL terminal session
-```
-
-### 4. Windows One-Click Fast Scanner
+### 3. Windows One-Click Fast Scanner
 ```powershell
 .\firewall-scan.bat data\sample_real.fasta
 ```
 
-### 5. Interactive REPL Terminal
-```powershell
-.\genome_firewall.exe --interactive
+### 4. Execute — Standard CLI & Batch Mode
+```bash
+# Direct Interactive Terminal System (Default when run without arguments):
+./genome_firewall
+
+# Show usage and available command-line flags:
+./genome_firewall --help
+
+# Batch Mode — Full real dataset (MDR E. coli vs 455-marker CARD database):
+./genome_firewall --input data/sample_real.fasta --db data/markers_card_top.csv --fuzzy --async
+
+# Exact-only + serial (useful for deterministic debugging):
+./genome_firewall --input data/sample_real.fasta --db data/markers_card_top.csv --exact --serial
 ```
-Commands available inside the REPL:
+
+### 5. Execute — Direct Interactive Terminal System
+Launch the interactive terminal system directly:
+```bash
+./genome_firewall --interactive
+# or simply run without arguments:
+./genome_firewall
+```
+
+The system provides both a numbered interactive menu and direct CLI commands:
+```
+========================================================================
+         DIRECT TERMINAL TEST SYSTEM - INTERACTIVE COMMANDS
+========================================================================
+  [1] scan [filepath]        : Zero-Copy Memory-Mapped FASTA scan & test scores
+  [2] scan_seq [nucleotides] : Test raw DNA sequence directly in terminal
+  [3] query [kmer]           : 4-ary Prefix Trie & Bloom Filter diagnostics
+  [4] mmap [filepath]        : Virtual memory-map & I/O throughput audit
+  [5] scores / features      : Inspect test scores & Binary Feature Vector X
+  [6] config                 : Interactive system feature configuration wizard
+  [7] demo                   : Quick benchmark scan on data/sample_real.fasta
+  [8] status                 : Architecture telemetry & memory allocation
+  [9] exit                   : Terminate terminal session
+========================================================================
+```
+
+Commands available inside the terminal:
 - `load_db <filepath>` : Dynamically load or swap the reference AMR catalog
-- `scan <fasta_file>`  : Execute full zero-copy scan on target genome
+- `scan [fasta_file]`  : Execute full zero-copy scan on target genome with test scores
+- `scan_seq [seq]`     : Test raw nucleotide DNA sequence directly in terminal
+- `query [kmer]`       : Query k-mer against 1 MB Bloom Filter & 4-ary Prefix Trie
+- `mmap [fasta_file]`  : Virtual memory-map & streaming I/O throughput audit
+- `scores / features`  : Inspect test scores & target-gated Binary Feature Vector X
+- `config`             : Interactive feature configuration wizard
 - `set_fuzzy <on|off>` : Toggle mutation-tolerant Hamming Distance matching
 - `set_async <on|off>` : Toggle multithreaded concurrent scoring
 - `set_conf <value>`   : Adjust confidence threshold percentage
 - `status`             : Inspect system telemetry, Trie node count, and memory
-- `help`               : Display available commands
+- `help / menu`        : Display command guide or numbered options menu
 - `exit`               : Quit interactive session
+
+You can also pipe commands from `data/repl_commands.txt`:
+```bash
+./genome_firewall --interactive < data/repl_commands.txt
+```
 
 ---
 

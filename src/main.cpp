@@ -18,22 +18,32 @@ void printBanner() {
 }
 
 void printUsage(const char* progName) {
-    std::cerr << "Usage: " << progName << " --input <genome.fasta> --db <markers.csv> [options]\n";
-    std::cerr << "       " << progName << " --interactive\n";
+    std::cerr << "Usage: " << progName << " [options]\n";
+    std::cerr << "       " << progName << " --interactive   (or run with no arguments for interactive terminal)\n";
+    std::cerr << "       " << progName << " --input <genome.fasta> --db <markers.csv> [options]\n";
     std::cerr << "Options:\n";
-    std::cerr << "  --input <file>        Input FASTA genome sequence file\n";
-    std::cerr << "  --db <file>           AMR reference database CSV/TSV file\n";
+    std::cerr << "  --input <file>, -in   Input FASTA genome sequence file\n";
+    std::cerr << "  --db <file>, -d       AMR reference database CSV/TSV file\n";
     std::cerr << "  --fuzzy               Enable mutation-tolerant Hamming Distance <= 1 matching (default)\n";
     std::cerr << "  --exact               Force strict exact matching only (Hamming = 0)\n";
     std::cerr << "  --async               Enable concurrent multithreaded chunk processing (default)\n";
     std::cerr << "  --serial              Run single-threaded sequential scoring\n";
     std::cerr << "  --confidence <val>    Set prediction confidence threshold percentage (default: 75.0)\n";
-    std::cerr << "  --interactive         Launch interactive REPL terminal session\n\n";
+    std::cerr << "  --interactive, -i     Launch direct interactive terminal test system\n";
+    std::cerr << "  --help, -h            Show this usage guide\n\n";
 }
 
 int main(int argc, char* argv[]) {
-    std::string fastaFile = "sample.fasta";
-    std::string amrDbFile = "markers.csv";
+    // If no arguments provided, launch direct interactive terminal test system immediately
+    if (argc == 1) {
+        REPLShell repl;
+        repl.run();
+        return 0;
+    }
+
+    std::string fastaFile = std::ifstream("data/sample_real.fasta").good() ? "data/sample_real.fasta" : "sample_real.fasta";
+    std::string amrDbFile = std::ifstream("data/markers_card_top.csv").good() ? "data/markers_card_top.csv" :
+                           (std::ifstream("data/markers_large.csv").good() ? "data/markers_large.csv" : "markers_large.csv");
     bool enableFuzzy = true;
     bool enableAsync = true;
     bool interactiveMode = false;
@@ -41,7 +51,10 @@ int main(int argc, char* argv[]) {
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
-        if (arg == "--interactive" || arg == "-i") {
+        if (arg == "--help" || arg == "-h") {
+            printUsage(argv[0]);
+            return 0;
+        } else if (arg == "--interactive" || arg == "-i") {
             interactiveMode = true;
         } else if ((arg == "--input" || arg == "-in") && i + 1 < argc) {
             fastaFile = argv[++i];
