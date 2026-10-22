@@ -16,13 +16,15 @@ public:
     FastaMmapParser& operator=(const FastaMmapParser&) = delete;
 
     // Get next chunk of sequence data with overlap support
-    bool getNextChunk(std::string& chunk, size_t maxChunkSize = 4096, size_t overlapSize = 0);
+    bool getNextChunk(std::string& chunk, size_t maxChunkSize = 65536, size_t overlapSize = 21);
 
     bool isMemoryMapped() const { return useMmap; }
     size_t getFileSize() const { return fileSize; }
+    const std::string& getResolvedPath() const { return resolvedPath; }
 
 private:
     std::string filepath;
+    std::string resolvedPath;
     bool useMmap{false};
     size_t fileSize{0};
 

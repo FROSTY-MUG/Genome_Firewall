@@ -37,7 +37,7 @@ public:
         std::ifstream file(filepath);
         if (!file.is_open()) return records;
         std::string line;
-        std::getline(file, line);
+        std::getline(file, line); // Header
         while (std::getline(file, line)) {
             if (line.empty()) continue;
             std::stringstream ss(line);
@@ -57,7 +57,7 @@ public:
         std::ifstream file(filepath);
         if (!file.is_open()) return records;
         std::string line;
-        std::getline(file, line);
+        std::getline(file, line); // Header
         while (std::getline(file, line)) {
             if (line.empty()) continue;
             std::stringstream ss(line);
@@ -65,7 +65,9 @@ public:
             std::getline(ss, id, ',');
             std::getline(ss, seq, ',');
             std::getline(ss, drug, ',');
-            records.push_back({id, seq, drug, "Gene", "CSV_DB"});
+            if (!id.empty() && !seq.empty()) {
+                records.push_back({id, seq, drug.empty() ? "Broad-Spectrum" : drug, "Gene", "CSV_DB"});
+            }
         }
         return records;
     }
@@ -73,60 +75,57 @@ public:
 
 std::unique_ptr<IDatabaseParser> AMRDatabase::getParser(DBFormat format) {
     (void)format;
-    return nullptr; // Controlled dynamically in loadFromFile
+    return nullptr;
+}
+
+static std::string resolveDbPath(const std::string& filepath) {
+    std::ifstream test(filepath);
+    if (test.good()) return filepath;
+    std::string fallback = "data/" + filepath;
+    std::ifstream test2(fallback);
+    if (test2.good()) return fallback;
+    return filepath;
 }
 
 void AMRDatabase::loadFromFile(const std::string& filepath, AMRTrie& trie) {
+    databaseRecords.clear();
+    std::string actualPath = resolveDbPath(filepath);
     std::unique_ptr<IDatabaseParser> parser;
 
-    // Dynamically Route by File Extension
-    if (filepath.find(".fasta") != std::string::npos || filepath.find(".fsa") != std::string::npos) {
+    if (actualPath.find(".fasta") != std::string::npos || actualPath.find(".fsa") != std::string::npos) {
         parser = std::make_unique<FastaDBParser>();
-        std::cout << "[*] Routing to Native FASTA Parser for: " << filepath << "\n";
-    } else if (filepath.find(".tsv") != std::string::npos) {
+        std::cout << "[*] Routing to Native FASTA Parser for: " << actualPath << "\n";
+    } else if (actualPath.find(".tsv") != std::string::npos) {
         parser = std::make_unique<TSVParser>();
-        std::cout << "[*] Routing to Native TSV Parser for: " << filepath << "\n";
+        std::cout << "[*] Routing to Native TSV Parser for: " << actualPath << "\n";
     } else {
         parser = std::make_unique<CSVParser>();
-        std::cout << "[*] Routing to Native CSV Parser for: " << filepath << "\n";
+        std::cout << "[*] Routing to Native CSV Parser for: " << actualPath << "\n";
     }
 
-    auto newRecords = parser->parse(filepath);
+    auto newRecords = parser->parse(actualPath);
+    if (newRecords.empty()) {
+        std::cerr << "[!] Warning: No records parsed from database file: " << actualPath << "\n";
+        return;
+    }
 
-    // ---------------------------------------------------------------------------
-    // K-MER INDEXING STRATEGY
-    //
-    // The scoring engine slides a 21-mer window over the genome and calls
-    // trie.searchExact(kmer). searchExact only returns true when isEndOfMarker
-    // is set — which the trie sets at the END of each inserted string.
-    //
-    // If we insert the full 80-90bp marker sequences, the trie would only match
-    // a 21-mer at depth 21 ONLY IF isEndOfMarker is set there — which it never
-    // is for full-length markers.
-    //
-    // FIX: Extract all overlapping 21-mers from each marker and insert those
-    // as individual entries. This is the correct k-mer indexing approach used
-    // in bioinformatics tools (Kallisto, HISAT2, etc.).
-    // ---------------------------------------------------------------------------
     static const size_t KMER_LEN = 21;
-
-    int added     = 0;
+    int added = 0;
     int kmerTotal = 0;
+
+    databaseRecords.reserve(newRecords.size());
 
     for (const auto& rec : newRecords) {
         if (rec.sequence.length() < KMER_LEN) continue;
 
+        int recordIdx = static_cast<int>(databaseRecords.size());
         databaseRecords.push_back(rec);
 
-        // Build pipe-delimited metadata: "id|type|drug|recType"
-        // PredictorEngine::analyzeSequenceFeatures parses exactly this format
-        std::string meta = rec.markerId + "|" + rec.recordType + "|"
-                         + rec.targetDrug + "|ResistanceGene";
-
-        // Index every overlapping 21-mer from the marker sequence
-        for (size_t i = 0; i <= rec.sequence.length() - KMER_LEN; ++i) {
-            std::string kmer = rec.sequence.substr(i, KMER_LEN);
-            trie.insertMarker(kmer, meta, rec.targetDrug, rec.recordType);
+        // Index all overlapping 21-mers into Trie with zero-allocation pointer slices
+        const char* seqData = rec.sequence.data();
+        const size_t seqLen = rec.sequence.length();
+        for (size_t i = 0; i <= seqLen - KMER_LEN; ++i) {
+            trie.insertMarker(seqData + i, KMER_LEN, recordIdx);
             ++kmerTotal;
         }
         ++added;

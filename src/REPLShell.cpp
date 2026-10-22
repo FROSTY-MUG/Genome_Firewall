@@ -9,12 +9,15 @@
 #include <fstream>
 
 REPLShell::REPLShell() {
-    // Check if markers_large.csv exists, otherwise fall back to markers.csv
-    std::ifstream testLarge("markers_large.csv");
-    if (testLarge.good()) {
+    // Check if data/markers_card_top.csv exists, or data/markers_large.csv, or markers_large.csv
+    if (std::ifstream("data/markers_card_top.csv").good()) {
+        currentDbFile = "data/markers_card_top.csv";
+    } else if (std::ifstream("data/markers_large.csv").good()) {
+        currentDbFile = "data/markers_large.csv";
+    } else if (std::ifstream("markers_large.csv").good()) {
         currentDbFile = "markers_large.csv";
     } else {
-        currentDbFile = "markers.csv";
+        currentDbFile = "data/markers.csv";
     }
     db.loadFromFile(currentDbFile, trie);
 }
@@ -89,9 +92,10 @@ void REPLShell::printStatus() {
 void REPLShell::executeScan(const std::string& fastaFile) {
     std::string targetFile = fastaFile;
     if (targetFile.empty()) {
-        std::cout << "Enter FASTA file path [default: sample_real.fasta]: " << std::flush;
+        std::string defFile = std::ifstream("data/sample_real.fasta").good() ? "data/sample_real.fasta" : "sample_real.fasta";
+        std::cout << "Enter FASTA file path [default: " << defFile << "]: " << std::flush;
         std::getline(std::cin, targetFile);
-        if (targetFile.empty()) targetFile = "sample_real.fasta";
+        if (targetFile.empty()) targetFile = defFile;
     }
 
     // Verify file exists
@@ -305,9 +309,10 @@ void REPLShell::executeTrieQuery(const std::string& kmer) {
 void REPLShell::executeMmapDiagnostics(const std::string& fastaFile) {
     std::string targetFile = fastaFile;
     if (targetFile.empty()) {
-        std::cout << "Enter FASTA file path to benchmark memory mapping [default: sample_real.fasta]: " << std::flush;
+        std::string defFile = std::ifstream("data/sample_real.fasta").good() ? "data/sample_real.fasta" : "sample_real.fasta";
+        std::cout << "Enter FASTA file path to benchmark memory mapping [default: " << defFile << "]: " << std::flush;
         std::getline(std::cin, targetFile);
-        if (targetFile.empty()) targetFile = "sample_real.fasta";
+        if (targetFile.empty()) targetFile = defFile;
     }
 
     std::ifstream checkFile(targetFile);
@@ -491,23 +496,18 @@ void REPLShell::run() {
             printScoresAndFeatures();
         } else if (cmd == "6") {
             configureFeatures();
-        } else if (cmd == "7") {
-            executeScan("sample_real.fasta");
-        } else if (cmd == "8") {
+        } else if (cmd == "7" || cmd == "demo") {
+            std::string defDemo = std::ifstream("data/sample_real.fasta").good() ? "data/sample_real.fasta" : "sample_real.fasta";
+            executeScan(defDemo);
+        } else if (cmd == "8" || cmd == "status") {
             printStatus();
         } else if (cmd == "9" || cmd == "exit" || cmd == "quit") {
             std::cout << "Exiting Genome Firewall terminal session. Goodbye!\n";
             break;
-        }
-        // Direct Command Handlers
-        else if (cmd == "menu") {
+        } else if (cmd == "menu") {
             printMenu();
         } else if (cmd == "help") {
             printHelp();
-        } else if (cmd == "status") {
-            printStatus();
-        } else if (cmd == "demo") {
-            executeScan("sample_real.fasta");
         } else if (cmd == "scan") {
             std::string path;
             if (ss >> path) {

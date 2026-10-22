@@ -1,34 +1,53 @@
 CXX      = g++
-# C++14 is used instead of C++17 for compatibility with MinGW.org GCC 6.3.
-# -pthread enables std::atomic. Native OS threads (Win32/POSIX) are used
-# in ScoringEngine instead of the broken <future>/<mutex> in MinGW.org GCC 6.3.
-CXXFLAGS = -std=c++14 -O2 -pthread \
+# C++14 is used for compatibility with MinGW.org GCC 6.3 and modern GCC/Clang.
+# -O3 enables aggressive loop unrolling, -march=native enables hardware SIMD vectorization, -flto enables cross-unit inlining.
+CXXFLAGS = -std=c++14 -O3 -pthread -march=native -fomit-frame-pointer -flto \
            -Wall -Wextra \
            -Wno-unused-result -Wno-unused-parameter \
            -Wno-missing-field-initializers \
-           -Wno-shift-count-overflow
+           -Wno-shift-count-overflow \
+           -Iinclude
 
-# MinGW.org uses -mthreads (not -lpthread which doesn't exist in this toolchain)
-LDFLAGS  = -mthreads
+# MinGW uses -mthreads (native Win32 threading); Linux/macOS uses -pthread
+LDFLAGS  = -mthreads -flto
 
-SOURCES = AMRDatabase.cpp FastaMmapParser.cpp AMRBloomFilter.cpp TrieArena.cpp \
-          AMRTrie.cpp LogisticRegressor.cpp PredictorEngine.cpp \
-          ScoringEngine.cpp REPLShell.cpp main.cpp
-OBJECTS = $(SOURCES:.cpp=.o)
-TARGET  = genome_firewall
+SRCDIR   = src
+INCDIR   = include
+OBJDIR   = obj
+BINDIR   = .
+
+SOURCES  = $(SRCDIR)/AMRDatabase.cpp \
+           $(SRCDIR)/FastaMmapParser.cpp \
+           $(SRCDIR)/AMRBloomFilter.cpp \
+           $(SRCDIR)/TrieArena.cpp \
+           $(SRCDIR)/AMRTrie.cpp \
+           $(SRCDIR)/ProteomeTranslator.cpp \
+           $(SRCDIR)/LogisticRegressor.cpp \
+           $(SRCDIR)/PredictorEngine.cpp \
+           $(SRCDIR)/ScoringEngine.cpp \
+           $(SRCDIR)/REPLShell.cpp \
+           $(SRCDIR)/main.cpp
+
+OBJECTS  = $(patsubst $(SRCDIR)/%.cpp,$(OBJDIR)/%.o,$(SOURCES))
+TARGET   = genome_firewall
 
 all: $(TARGET)
 
 $(TARGET): $(OBJECTS)
 	$(CXX) $(OBJECTS) $(LDFLAGS) -o $@
 
-%.o: %.cpp
+$(OBJDIR)/%.o: $(SRCDIR)/%.cpp | $(OBJDIR)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-# Windows-compatible clean (tries del first, falls back to rm for Linux/macOS)
-clean:
-	-del /Q *.o 2>NUL
-	-del /Q $(TARGET).exe 2>NUL
-	-rm -f *.o $(TARGET)
+$(OBJDIR):
+	-mkdir $(OBJDIR) 2>NUL || mkdir -p $(OBJDIR)
 
-.PHONY: all clean
+clean:
+	-cmd /c "if exist $(OBJDIR)\*.o del /Q $(OBJDIR)\*.o" 2>NUL
+	-cmd /c "if exist $(TARGET).exe del /Q $(TARGET).exe" 2>NUL
+
+test: $(TARGET)
+	@echo [*] Running Verification Test on CARD Top Markers and Sample Genome...
+	$(TARGET) --input data/sample_real.fasta --db data/markers_card_top.csv
+
+.PHONY: all clean test

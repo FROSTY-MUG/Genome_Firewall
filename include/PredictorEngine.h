@@ -26,9 +26,9 @@ struct DrugPrediction {
     double probability;     // Logistic regression probability P (0.0 to 1.0)
     double confidenceScore; // Scaled confidence percentage (0.0 to 100.0%)
     EvidenceTier tier;
-    int directHits;
-    int mutatedHits;
-    bool targetPresent;
+    int directHits{0};
+    int mutatedHits{0};
+    bool targetPresent{false};
     std::string clinicalRecommendation;
 };
 
@@ -36,8 +36,14 @@ class PredictorEngine {
 public:
     explicit PredictorEngine(const AMRTrie& trie, double confidenceThreshold = 75.0);
 
-    // Module 01: Feature Extraction
+    // Module 01: Sequence Feature Extraction (legacy/fallback path)
     void analyzeSequenceFeatures(const std::string& sequence, size_t kmerLength, bool enableFuzzy);
+
+    // Direct thread-safe hit accumulator (avoids redundant second sequence pass)
+    void mergeHits(const std::unordered_map<std::string, int>& direct,
+                   const std::unordered_map<std::string, int>& mutated,
+                   const std::unordered_map<std::string, bool>& targetIntegrity,
+                   int directCount, int mutatedCount);
 
     // Module 02 & 03: Evaluate target-gated predictions using Logistic Regression
     std::vector<DrugPrediction> evaluatePredictionsWithModel(const AMRDatabase& db, const std::vector<int>& featureVector) const;
@@ -45,6 +51,9 @@ public:
     std::string generateASCIIReport(const std::vector<DrugPrediction>& predictions, double elapsedMs, size_t totalBytesScanned) const;
 
     const LogisticRegressor& getModel() const { return regressor; }
+
+    int getDirectHitCount() const { return directHitCount; }
+    int getMutatedHitCount() const { return mutatedHitCount; }
 
 private:
     const AMRTrie& trie;

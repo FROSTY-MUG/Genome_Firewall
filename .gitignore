@@ -1,20 +1,25 @@
-# Compiled C++ Binaries
+# Build artifacts & compiled binaries
+obj/
+build/
+bin/
 *.exe
 *.o
 *.dll
 *.out
 
-# Massive Datasets and Archives
+# Massive Datasets & Raw Archives
 db/
 input_samples/
-*.fasta
-*.fsa
-*.fna
-*.csv
-*.tsv
+*.tar.bz2
 *.zip
 *.gz
+data/nucleotide_fasta_*.fasta
+data/protein_fasta_*.fasta
+data/aro_*.tsv
+data/shortname_*.tsv
 
 # IDE and OS files
 .vscode/
+.idea/
 .DS_Store
+Thumbs.db

@@ -41,8 +41,9 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
-    std::string fastaFile = "sample_real.fasta";
-    std::string amrDbFile = "markers_large.csv";
+    std::string fastaFile = std::ifstream("data/sample_real.fasta").good() ? "data/sample_real.fasta" : "sample_real.fasta";
+    std::string amrDbFile = std::ifstream("data/markers_card_top.csv").good() ? "data/markers_card_top.csv" :
+                           (std::ifstream("data/markers_large.csv").good() ? "data/markers_large.csv" : "markers_large.csv");
     bool enableFuzzy = true;
     bool enableAsync = true;
     bool interactiveMode = false;
