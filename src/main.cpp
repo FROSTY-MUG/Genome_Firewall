@@ -3,6 +3,7 @@
 #include <vector>
 #include <chrono>
 #include <iomanip>
+#include <stdexcept>
 #include "AMRTrie.h"
 #include "AMRDatabase.h"
 #include "FastaMmapParser.h"
@@ -10,14 +11,30 @@
 #include "PredictorEngine.h"
 #include "REPLShell.h"
 
-void printBanner() {
-    std::cout << "========================================================================\n";
-    std::cout << "               GENOME FIREWALL v2.0 - BIOSECURITY CLI                   \n";
-    std::cout << "       Predictive Antimicrobial Resistance Decision Engine              \n";
-    std::cout << "========================================================================\n";
+static std::string escapeJson(const std::string& value) {
+    std::string out;
+    out.reserve(value.size() + 8);
+    for (char c : value) {
+        switch (c) {
+            case '"':  out += "\\\""; break;
+            case '\\': out += "\\\\"; break;
+            case '\n': out += "\\n";  break;
+            case '\r': out += "\\r";  break;
+            case '\t': out += "\\t";  break;
+            default:   out += c;
+        }
+    }
+    return out;
 }
 
-void printUsage(const char* progName) {
+static void printBanner() {
+    std::cerr << "========================================================================\n";
+    std::cerr << "               GENOME FIREWALL v2.0 - BIOSECURITY CLI                   \n";
+    std::cerr << "       Predictive Antimicrobial Resistance Decision Engine              \n";
+    std::cerr << "========================================================================\n";
+}
+
+static void printUsage(const char* progName) {
     std::cerr << "Usage: " << progName << " --input <genome.fasta> --db <markers.csv> [options]\n";
     std::cerr << "       " << progName << " --interactive\n";
     std::cerr << "Options:\n";
@@ -28,6 +45,7 @@ void printUsage(const char* progName) {
     std::cerr << "  --async               Enable concurrent multithreaded chunk processing (default)\n";
     std::cerr << "  --serial              Run single-threaded sequential scoring\n";
     std::cerr << "  --confidence <val>    Set prediction confidence threshold percentage (default: 75.0)\n";
+    std::cerr << "  --json                Emit a machine-readable JSON report on stdout\n";
     std::cerr << "  --interactive         Launch interactive REPL terminal session\n\n";
 }
 
@@ -37,11 +55,14 @@ int main(int argc, char* argv[]) {
     bool enableFuzzy = true;
     bool enableAsync = true;
     bool interactiveMode = false;
+    bool enableJson = false;
     double confidenceThreshold = 75.0;
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
-        if (arg == "--interactive" || arg == "-i") {
+        if (arg == "--json") {
+            enableJson = true;
+        } else if (arg == "--interactive" || arg == "-i") {
             interactiveMode = true;
         } else if ((arg == "--input" || arg == "-in") && i + 1 < argc) {
             fastaFile = argv[++i];
@@ -56,7 +77,17 @@ int main(int argc, char* argv[]) {
         } else if (arg == "--async") {
             enableAsync = true;
         } else if (arg == "--confidence" && i + 1 < argc) {
-            confidenceThreshold = std::stod(argv[++i]);
+            try {
+                confidenceThreshold = std::stod(argv[++i]);
+            } catch (...) {
+                std::cerr << "[!] Invalid value for --confidence, using default 75.0\n";
+                confidenceThreshold = 75.0;
+            }
+            if (confidenceThreshold < 0.0) confidenceThreshold = 0.0;
+            if (confidenceThreshold > 100.0) confidenceThreshold = 100.0;
+        } else if (arg == "--help" || arg == "-h") {
+            printUsage(argv[0]);
+            return 0;
         } else if (i == 1 && arg[0] != '-') {
             fastaFile = arg;
         } else if (i == 2 && arg[0] != '-') {
@@ -70,10 +101,11 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
+    // Diagnostics always go to stderr so stdout stays clean for --json piping.
     printBanner();
-    std::cout << "[*] System Mode: " << (enableFuzzy ? "Mutation-Tolerant (Hamming <= 1)" : "Exact Match Only (Hamming = 0)")
+    std::cerr << "[*] System Mode: " << (enableFuzzy ? "Mutation-Tolerant (Hamming <= 1)" : "Exact Match Only (Hamming = 0)")
               << " | " << (enableAsync ? "Multithreaded (Native OS Threads)" : "Sequential (Single-threaded)") << "\n";
-    std::cout << "[*] Confidence Threshold: " << confidenceThreshold << "%\n\n";
+    std::cerr << "[*] Confidence Threshold: " << confidenceThreshold << "%\n\n";
 
     auto totalStart = std::chrono::high_resolution_clock::now();
 
@@ -82,19 +114,23 @@ int main(int argc, char* argv[]) {
         AMRTrie trie;
         AMRDatabase db;
 
-        std::cout << "[*] Loading AMR Reference Catalog from: " << amrDbFile << "...\n";
+        std::cerr << "[*] Loading AMR Reference Catalog from: " << amrDbFile << "...\n";
         auto dbStart = std::chrono::high_resolution_clock::now();
         db.loadFromFile(amrDbFile, trie);
         auto dbEnd = std::chrono::high_resolution_clock::now();
         double dbTimeMs = std::chrono::duration<double, std::milli>(dbEnd - dbStart).count();
 
-        std::cout << "    -> Indexed " << db.getMarkerCount() << " AMR signatures in 4-ary Prefix Trie ("
+        if (db.getMarkerCount() == 0) {
+            throw std::runtime_error("No usable markers found in database: " + amrDbFile);
+        }
+
+        std::cerr << "    -> Indexed " << db.getMarkerCount() << " AMR signatures in 4-ary Prefix Trie ("
                   << trie.getNodeCount() << " nodes, Arena: " << (trie.getMemoryUsage() / 1024) << " KB)\n";
-        std::cout << "    -> Fast-Rejection Bloom Filter initialized (" << trie.getBloomFilter().getBitSize() << " bits)\n";
-        std::cout << "    -> Load & Index Time: " << std::fixed << std::setprecision(3) << dbTimeMs << " ms\n\n";
+        std::cerr << "    -> Fast-Rejection Bloom Filter initialized (" << trie.getBloomFilter().getBitSize() << " bits)\n";
+        std::cerr << "    -> Load & Index Time: " << std::fixed << std::setprecision(3) << dbTimeMs << " ms\n\n";
 
         // 2. Initialize Zero-Copy FASTA Parser & Scoring Engine
-        std::cout << "[*] Initializing Zero-Copy Sequence Ingestion for: " << fastaFile << "...\n";
+        std::cerr << "[*] Initializing Zero-Copy Sequence Ingestion for: " << fastaFile << "...\n";
         FastaMmapParser parser(fastaFile);
         ScoringEngine engine(trie, db, enableFuzzy, confidenceThreshold);
 
@@ -126,21 +162,54 @@ int main(int argc, char* argv[]) {
         auto scanEnd = std::chrono::high_resolution_clock::now();
         double scanTimeMs = std::chrono::duration<double, std::milli>(scanEnd - scanStart).count();
 
-        std::cout << "[+] Scan completed across " << chunkCount << " chunks (" 
+        std::cerr << "[+] Scan completed across " << chunkCount << " chunks ("
                   << (totalBytesParsed / 1024) << " KB scanned).\n";
 
         // 3. Extract Binary Feature Vector X & Evaluate Logistic Regression Predictions
         std::vector<int> X = engine.getBinaryFeatureVector();
         auto predictions = engine.getPredictor().evaluatePredictionsWithModel(db, X);
-        std::string report = engine.getPredictor().generateASCIIReport(predictions, scanTimeMs, totalBytesParsed);
-        std::cout << report;
 
         auto totalEnd = std::chrono::high_resolution_clock::now();
         double totalTimeMs = std::chrono::duration<double, std::milli>(totalEnd - totalStart).count();
-        std::cout << "[*] Total Execution Wall-Clock Time: " << std::fixed << std::setprecision(2) << totalTimeMs << " ms\n\n";
+
+        if (enableJson) {
+            ScanContext ctx;
+            ctx.inputFile = fastaFile;
+            ctx.databaseFile = amrDbFile;
+            ctx.systemMode = enableFuzzy ? "fuzzy" : "exact";
+            ctx.threading = enableAsync ? "async" : "serial";
+            ctx.confidenceThreshold = confidenceThreshold;
+
+            ctx.dbTimeMs = dbTimeMs;
+            ctx.scanTimeMs = scanTimeMs;
+            ctx.totalTimeMs = totalTimeMs;
+
+            ctx.totalBytesScanned = totalBytesParsed;
+            ctx.chunkCount = chunkCount;
+            ctx.kmerLength = KMER_LENGTH;
+            ctx.chunkSize = CHUNK_SIZE;
+
+            ctx.markerCount = db.getMarkerCount();
+            ctx.trieNodes = trie.getNodeCount();
+            ctx.trieMemoryKB = trie.getMemoryUsage() / 1024;
+            ctx.bloomBits = trie.getBloomFilter().getBitSize();
+
+            ctx.exactHits = static_cast<size_t>(engine.getExactHits());
+            ctx.mutatedHits = static_cast<size_t>(engine.getMutatedHits());
+
+            std::cout << engine.getPredictor().generateJSONReport(predictions, ctx) << "\n";
+        } else {
+            std::string report = engine.getPredictor().generateASCIIReport(predictions, scanTimeMs, totalBytesParsed);
+            std::cout << report;
+            std::cerr << "[*] Total Execution Wall-Clock Time: " << std::fixed << std::setprecision(2) << totalTimeMs << " ms\n\n";
+        }
 
     } catch (const std::exception& e) {
-        std::cerr << "\n[!] FATAL ERROR: " << e.what() << "\n";
+        if (enableJson) {
+            std::cout << "{\"error\":\"scan_failed\",\"message\":\"" << escapeJson(e.what()) << "\"}\n";
+        } else {
+            std::cerr << "\n[!] FATAL ERROR: " << e.what() << "\n";
+        }
         return 1;
     }
 

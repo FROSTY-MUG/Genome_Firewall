@@ -31,8 +31,9 @@ struct WinLockGuard {
 };
 
 #else
-// POSIX fallback (Linux/macOS)
+// POSIX fallback (Linux/macOS/Android)
 #include <pthread.h>
+#include <unistd.h>
 
 struct WinMutex {
     pthread_mutex_t m;
