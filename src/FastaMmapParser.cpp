@@ -48,13 +48,13 @@ static std::string resolveFastaPath(const std::string& path) {
 FastaMmapParser::FastaMmapParser(const std::string& filepath)
     : filepath(filepath), resolvedPath(resolveFastaPath(filepath)) {
     if (!initMmap()) {
-        std::cout << "[!] Info: Fallback to std::ifstream for FASTA parsing.\n";
+        std::cerr << "[!] Info: Fallback to std::ifstream for FASTA parsing.\n";
         fallbackStream.open(resolvedPath);
         if (!fallbackStream.is_open()) {
             throw std::runtime_error("FastaMmapParser Error: Could not open file " + resolvedPath);
         }
     } else {
-        std::cout << "[+] Memory-Mapped Zero-Copy I/O active for " << resolvedPath << " (" << fileSize << " bytes mapped).\n";
+        std::cerr << "[+] Memory-Mapped Zero-Copy I/O active for " << resolvedPath << " (" << fileSize << " bytes mapped).\n";
     }
 }
 

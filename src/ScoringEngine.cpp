@@ -105,7 +105,10 @@ void ScoringEngine::initThreadPool() {
     pthread_cond_init(&posixWorkCond, NULL);
     pthread_cond_init(&posixDoneCond, NULL);
 
-    size_t numWorkers = 4;
+    long detected = sysconf(_SC_NPROCESSORS_ONLN);
+    size_t numWorkers = detected > 0 ? static_cast<size_t>(detected) : 4;
+    if (numWorkers < 2) numWorkers = 2;
+    if (numWorkers > 16) numWorkers = 16;
     workerThreads.resize(numWorkers);
     for (size_t i = 0; i < numWorkers; ++i) {
         pthread_create(&workerThreads[i], NULL, ScoringEngine::workerLoop, this);

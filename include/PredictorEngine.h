@@ -11,7 +11,7 @@
 enum class PredictionStatus {
     LIKELY_TO_FAIL, // P > 0.85 (High confidence of resistance)
     LIKELY_TO_WORK, // P < 0.15 AND Target Intact (High confidence of susceptibility)
-    NO_CALL         // 0.15 <= P <= 0.85 (Uncertain evidence / statistical association)
+    NO_CALL         // Uncertain evidence, or a call below the confidence threshold
 };
 
 enum class EvidenceTier {
@@ -32,6 +32,32 @@ struct DrugPrediction {
     std::string clinicalRecommendation;
 };
 
+// Everything the machine-readable report needs, beyond the predictions themselves.
+struct ScanContext {
+    std::string inputFile;
+    std::string databaseFile;
+    std::string systemMode;   // "fuzzy" | "exact"
+    std::string threading;    // "async" | "serial"
+    double confidenceThreshold{75.0};
+
+    double dbTimeMs{0.0};
+    double scanTimeMs{0.0};
+    double totalTimeMs{0.0};
+
+    size_t totalBytesScanned{0};
+    size_t chunkCount{0};
+    size_t kmerLength{21};
+    size_t chunkSize{4096};
+
+    size_t markerCount{0};
+    size_t trieNodes{0};
+    size_t trieMemoryKB{0};
+    size_t bloomBits{0};
+
+    size_t exactHits{0};
+    size_t mutatedHits{0};
+};
+
 class PredictorEngine {
 public:
     explicit PredictorEngine(const AMRTrie& trie, double confidenceThreshold = 75.0);
@@ -49,6 +75,9 @@ public:
     std::vector<DrugPrediction> evaluatePredictionsWithModel(const AMRDatabase& db, const std::vector<int>& featureVector) const;
 
     std::string generateASCIIReport(const std::vector<DrugPrediction>& predictions, double elapsedMs, size_t totalBytesScanned) const;
+
+    // Machine-readable report consumed by the web frontend / API server.
+    std::string generateJSONReport(const std::vector<DrugPrediction>& predictions, const ScanContext& ctx) const;
 
     const LogisticRegressor& getModel() const { return regressor; }
 

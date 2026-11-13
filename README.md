@@ -88,7 +88,7 @@ The marker databases ship with multi-tier catalogs:
 | :--- | :--- | :--- | :--- |
 | `data/markers.csv` | 10 curated core | 5 classes | NCBI / CARD |
 | `data/markers_card_top.csv` | 455 real CARD markers | 11 comprehensive drug classes | Real CARD (Comprehensive Antibiotic Resistance Database) |
-| `data/markers_large.csv` | 53 multi-marker set | 10 drug classes | NCBI / CARD / ResFinder |
+| `data/markers_large.csv` | 54 multi-marker set | 10 drug classes | NCBI / CARD / ResFinder |
 
 **Drug classes covered (`markers_card_top.csv`):**
 - **Beta-lactams / Cephalosporins** - `blaTEM-1b`, `blaSHV-1/11/12`, `blaOXA-1/10/30`
@@ -171,6 +171,16 @@ Genome_Firewall/
 │   ├── sample.fasta         # E. coli K12 base genome
 │   ├── sample_real.fasta    # Multidrug-resistant E. coli K88 demo
 │   └── snps.txt             # Validated SNP mutation catalog
+├── web/                  # Local web console (no build step, no npm deps)
+│   ├── index.html        # App shell, dialogs, mobile tab bar
+│   ├── css/app.css       # Design system: tokens, layout, components, responsive
+│   └── js/               # ES modules: router, API client, views, icons
+│       ├── app.js        # Hash router, command palette, engine status
+│       ├── api.js        # Health / catalogue / NDJSON scan streaming
+│       ├── ui.js         # Formatting, toasts, CSV/JSON export, FASTA stats
+│       └── views/        # overview.js · scanner.js · report.js
+├── api/                  # Dependency-free Node host + JSON API
+│   └── server.js         # Static host, catalogue metadata, scan streaming
 ├── scripts/              # Data extraction, training, and paper generation
 │   ├── extract_datasets.py  # Ingests raw CARD JSON & extracts markers
 │   ├── real_train.py        # Gradient descent training loop
@@ -206,6 +216,8 @@ Genome_Firewall/
 | [`include/LogisticRegressor.h`](include/LogisticRegressor.h) / [`src/LogisticRegressor.cpp`](src/LogisticRegressor.cpp) | Binary sigmoid logistic regression engine ($P = \sigma(W \cdot X + b)$) |
 | [`include/REPLShell.h`](include/REPLShell.h) / [`src/REPLShell.cpp`](src/REPLShell.cpp) | Interactive terminal REPL shell for step-by-step diagnostic sessions |
 | [`Makefile`](Makefile) | Multi-platform build script with GCC/MinGW `-pthread -O3` optimization |
+| [`api/server.js`](api/server.js) | Dependency-free Node API: static host, catalogue metadata, NDJSON scan progress, export-safe JSON |
+| [`web/`](web/) | Local web console — landing, workbench with live engine log, and tiered decision report |
 | [`docs/Viva_Guide.md`](docs/Viva_Guide.md) | Comprehensive PBL Viva defense guide and mock oral evaluation simulator |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Technical architecture and systems engineering specification |
 | [`SECURITY.md`](SECURITY.md) | Biosecurity & memory safety guidelines, vulnerability disclosure process |
@@ -258,6 +270,7 @@ Options:
   --async               Enable concurrent multithreaded chunk processing (default)
   --serial              Run single-threaded sequential scoring
   --confidence <val>    Set prediction confidence threshold percentage (default: 75.0)
+  --json                Emit a machine-readable JSON report on stdout
   --interactive         Launch interactive REPL terminal session
 ```
 
@@ -279,6 +292,55 @@ Commands available inside the REPL:
 - `status`             : Inspect system telemetry, Trie node count, and memory
 - `help`               : Display available commands
 - `exit`               : Quit interactive session
+
+---
+
+## Web Console
+
+A local, zero-dependency web UI ships with the project. It talks to the engine
+through `api/server.js`, streams the real scan progress, and renders a tiered
+decision report. No `npm install`, no bundler, no external fonts or CDNs — it
+works offline on a laptop or inside Termux on Android.
+
+### Start it
+
+```bash
+make                 # build the engine first
+node api/server.js   # or: make serve
+# open http://127.0.0.1:8787
+```
+
+Environment: `PORT` (default `8787`), `HOST` (default `127.0.0.1`; set
+`0.0.0.0` to reach it from another device on the LAN), `MAX_UPLOAD_MB`
+(default `40`), `SCAN_TIMEOUT_MS` (default `180000`).
+
+### What it does
+
+- **Overview** — pipeline anatomy, catalogue counts and evidence-tier legend.
+- **Analyse** — drag-and-drop or paste FASTA, pick a catalogue, toggle SNP
+  tolerance/threading, set the confidence gate. The panel streams the engine's
+  own `stderr` log and stage transitions while the scan runs.
+- **Report** — verdict banner, per-class probability/confidence/tier table with
+  expandable evidence, full run telemetry, and JSON/CSV/clipboard export.
+- **Command palette** — `Ctrl/⌘ K` for navigation, demo genomes and exports.
+- **Persistence** — the last report and scan settings survive a reload
+  (`localStorage`), so a phone can be closed mid-review.
+
+### API surface
+
+| Method | Endpoint | Purpose |
+| :--- | :--- | :--- |
+| `GET` | `/api/health` | Engine status, CPU/RAM, catalogue metadata, sample availability |
+| `GET` | `/api/databases` | Curated catalogues with live marker and drug-class counts |
+| `GET` | `/api/samples` | Bundled demo genomes with availability |
+| `GET` | `/api/sample?name=…` | Raw FASTA for a whitelisted demo |
+| `POST` | `/api/scan` | Blocking scan, returns the full JSON report |
+| `POST` | `/api/scan/stream` | Same scan streamed as NDJSON (`stage`, `log`, `result`, `error`) |
+
+The server only accepts catalogues on its whitelist, writes uploads to an
+`os.tmpdir()` file with a random name, deletes it on process close, and kills
+the engine on timeout or client disconnect. All diagnostics from the C++ layer
+go to `stderr`; `stdout` is reserved for the JSON report.
 
 ---
 

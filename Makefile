@@ -8,8 +8,12 @@ CXXFLAGS = -std=c++14 -O3 -pthread -march=native -fomit-frame-pointer -flto \
            -Wno-shift-count-overflow \
            -Iinclude
 
-# MinGW uses -mthreads (native Win32 threading); Linux/macOS uses -pthread
+# MinGW uses -mthreads (native Win32 threading); Linux/macOS/Android uses -pthread
+ifeq ($(OS),Windows_NT)
 LDFLAGS  = -mthreads -flto
+else
+LDFLAGS  = -flto
+endif
 
 SRCDIR   = src
 INCDIR   = include
@@ -39,15 +43,27 @@ $(TARGET): $(OBJECTS)
 $(OBJDIR)/%.o: $(SRCDIR)/%.cpp | $(OBJDIR)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
+ifeq ($(OS),Windows_NT)
 $(OBJDIR):
-	-mkdir $(OBJDIR) 2>NUL || mkdir -p $(OBJDIR)
+	-mkdir $(OBJDIR) 2>NUL
 
 clean:
 	-cmd /c "if exist $(OBJDIR)\*.o del /Q $(OBJDIR)\*.o" 2>NUL
 	-cmd /c "if exist $(TARGET).exe del /Q $(TARGET).exe" 2>NUL
+else
+$(OBJDIR):
+	mkdir -p $(OBJDIR)
+
+clean:
+	rm -f $(OBJDIR)/*.o $(OBJDIR)/*.obj $(TARGET) $(TARGET).exe
+endif
 
 test: $(TARGET)
 	@echo [*] Running Verification Test on CARD Top Markers and Sample Genome...
 	$(TARGET) --input data/sample_real.fasta --db data/markers_card_top.csv
 
-.PHONY: all clean test
+serve: $(TARGET)
+	@echo [*] Starting the local web console on http://127.0.0.1:8787
+	@node api/server.js
+
+.PHONY: all clean test serve

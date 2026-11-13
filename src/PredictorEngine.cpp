@@ -81,17 +81,31 @@ std::vector<DrugPrediction> PredictorEngine::evaluatePredictionsWithModel(const 
         // Model Inference: P(Resistance)
         pred.probability = regressor.predictProbability(drug, featureVector);
 
-        // Map P into Status and Clinical Recommendation
+        // Map P into Status and Clinical Recommendation.
+        // A call is only emitted when the scaled confidence clears the user's
+        // threshold; otherwise the result is deliberately downgraded to NO-CALL.
         if (pred.probability > 0.85) {
-            pred.status = PredictionStatus::LIKELY_TO_FAIL;
             pred.confidenceScore = pred.probability * 100.0;
-            pred.tier = (pred.directHits > 0) ? EvidenceTier::TIER_I : EvidenceTier::TIER_II;
-            pred.clinicalRecommendation = "DO NOT PRESCRIBE (Resistant)";
+            if (pred.confidenceScore >= confidenceThreshold) {
+                pred.status = PredictionStatus::LIKELY_TO_FAIL;
+                pred.tier = (pred.directHits > 0) ? EvidenceTier::TIER_I : EvidenceTier::TIER_II;
+                pred.clinicalRecommendation = "DO NOT PRESCRIBE (Resistant)";
+            } else {
+                pred.status = PredictionStatus::NO_CALL;
+                pred.tier = EvidenceTier::TIER_II;
+                pred.clinicalRecommendation = "PROCEED WITH CLINICAL CAUTION";
+            }
         } else if (pred.probability < 0.15) {
-            pred.status = PredictionStatus::LIKELY_TO_WORK;
             pred.confidenceScore = (1.0 - pred.probability) * 100.0;
-            pred.tier = EvidenceTier::TIER_III;
-            pred.clinicalRecommendation = "VIABLE DRUG TARGET (Susceptible)";
+            if (pred.confidenceScore >= confidenceThreshold) {
+                pred.status = PredictionStatus::LIKELY_TO_WORK;
+                pred.tier = EvidenceTier::TIER_III;
+                pred.clinicalRecommendation = "VIABLE DRUG TARGET (Susceptible)";
+            } else {
+                pred.status = PredictionStatus::NO_CALL;
+                pred.tier = EvidenceTier::TIER_II;
+                pred.clinicalRecommendation = "PROCEED WITH CLINICAL CAUTION";
+            }
         } else {
             pred.status = PredictionStatus::NO_CALL;
             pred.confidenceScore = (1.0 - std::abs(pred.probability - 0.5) * 2.0) * 100.0;
@@ -164,4 +178,114 @@ std::string PredictorEngine::generateASCIIReport(const std::vector<DrugPredictio
     ss << hLine << "\n\n";
 
     return ss.str();
+}
+
+namespace {
+// Minimal JSON string escaper — input includes user-controlled file names.
+std::string jsonEscape(const std::string& value) {
+    std::string out;
+    out.reserve(value.size() + 8);
+    for (unsigned char c : value) {
+        switch (c) {
+            case '"':  out += "\\\""; break;
+            case '\\': out += "\\\\"; break;
+            case '\b': out += "\\b";  break;
+            case '\f': out += "\\f";  break;
+            case '\n': out += "\\n";  break;
+            case '\r': out += "\\r";  break;
+            case '\t': out += "\\t";  break;
+            default:
+                if (c < 0x20) {
+                    std::ostringstream hex;
+                    hex << "\\u" << std::hex << std::setw(4) << std::setfill('0') << (int)c;
+                    out += hex.str();
+                } else {
+                    out += static_cast<char>(c);
+                }
+        }
+    }
+    return out;
+}
+} // namespace
+
+std::string PredictorEngine::generateJSONReport(const std::vector<DrugPrediction>& predictions, const ScanContext& ctx) const {
+    std::ostringstream oss;
+    oss << std::fixed << std::setprecision(6);
+
+    const auto failCount = std::count_if(predictions.begin(), predictions.end(),
+        [](const DrugPrediction& p) { return p.status == PredictionStatus::LIKELY_TO_FAIL; });
+    const auto workCount = std::count_if(predictions.begin(), predictions.end(),
+        [](const DrugPrediction& p) { return p.status == PredictionStatus::LIKELY_TO_WORK; });
+    const auto noCallCount = std::count_if(predictions.begin(), predictions.end(),
+        [](const DrugPrediction& p) { return p.status == PredictionStatus::NO_CALL; });
+
+    oss << "{";
+    oss << "\"schemaVersion\":2,";
+
+    oss << "\"engine\":{"
+        << "\"name\":\"Genome Firewall\","
+        << "\"version\":\"2.0\","
+        << "\"systemMode\":\"" << jsonEscape(ctx.systemMode) << "\","
+        << "\"threading\":\"" << jsonEscape(ctx.threading) << "\","
+        << "\"kmerLength\":" << ctx.kmerLength << ","
+        << "\"chunkSize\":" << ctx.chunkSize << ","
+        << "\"confidenceThreshold\":" << ctx.confidenceThreshold
+        << "},";
+
+    oss << "\"input\":{"
+        << "\"fileName\":\"" << jsonEscape(ctx.inputFile) << "\","
+        << "\"bytes\":" << ctx.totalBytesScanned << ","
+        << "\"chunks\":" << ctx.chunkCount
+        << "},";
+
+    oss << "\"database\":{"
+        << "\"file\":\"" << jsonEscape(ctx.databaseFile) << "\","
+        << "\"markers\":" << ctx.markerCount << ","
+        << "\"trieNodes\":" << ctx.trieNodes << ","
+        << "\"trieMemoryKB\":" << ctx.trieMemoryKB << ","
+        << "\"bloomBits\":" << ctx.bloomBits << ","
+        << "\"loadTimeMs\":" << ctx.dbTimeMs
+        << "},";
+
+    oss << "\"telemetry\":{"
+        << "\"dbLoadTimeMs\":" << ctx.dbTimeMs << ","
+        << "\"scanTimeMs\":" << ctx.scanTimeMs << ","
+        << "\"totalTimeMs\":" << ctx.totalTimeMs << ","
+        << "\"totalBytesScanned\":" << ctx.totalBytesScanned << ","
+        << "\"chunkCount\":" << ctx.chunkCount << ","
+        << "\"trieNodes\":" << ctx.trieNodes << ","
+        << "\"memoryKB\":" << ctx.trieMemoryKB << ","
+        << "\"throughputMBps\":" << (ctx.scanTimeMs > 0.0
+            ? (static_cast<double>(ctx.totalBytesScanned) / (1024.0 * 1024.0)) / (ctx.scanTimeMs / 1000.0)
+            : 0.0)
+        << "},";
+
+    oss << "\"summary\":{"
+        << "\"drugCount\":" << predictions.size() << ","
+        << "\"likelyToFail\":" << failCount << ","
+        << "\"likelyToWork\":" << workCount << ","
+        << "\"noCall\":" << noCallCount << ","
+        << "\"exactHits\":" << ctx.exactHits << ","
+        << "\"mutatedHits\":" << ctx.mutatedHits
+        << "},";
+
+    oss << "\"predictions\":[";
+    for (size_t i = 0; i < predictions.size(); ++i) {
+        const auto& p = predictions[i];
+        oss << "{";
+        oss << "\"drugName\":\"" << jsonEscape(p.drugName) << "\",";
+        oss << "\"status\":\"" << statusToString(p.status) << "\",";
+        oss << "\"probability\":" << p.probability << ",";
+        oss << "\"confidenceScore\":" << p.confidenceScore << ",";
+        oss << "\"evidenceTier\":\"" << tierToString(p.tier) << "\",";
+        oss << "\"clinicalRecommendation\":\"" << jsonEscape(p.clinicalRecommendation) << "\",";
+        oss << "\"directHits\":" << p.directHits << ",";
+        oss << "\"mutatedHits\":" << p.mutatedHits << ",";
+        oss << "\"targetPresent\":" << (p.targetPresent ? "true" : "false");
+        oss << "}";
+        if (i + 1 < predictions.size()) oss << ",";
+    }
+    oss << "]";
+    oss << "}";
+    return oss.str();
 }

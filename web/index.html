@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Genome Firewall — AMR biosecurity console</title>
+  <meta name="description" content="Scan bacterial genomes against curated AMR markers and get calibrated antibiotic resistance predictions from a zero-copy C++ inference engine." />
+  <meta name="theme-color" content="#05080a" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/css/app.css" />
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="backdrop" aria-hidden="true"></div>
+
+  <header class="topbar" id="topbar">
+    <div class="topbar__inner">
+      <a class="brand" href="#/" data-route-link="/" aria-label="Genome Firewall home">
+        <span class="brand__mark">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M7 3c0 4 10 5 10 9s-10 5-10 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+            <path d="M17 3c0 4-10 5-10 9s10 5 10 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" opacity=".55"/>
+            <path d="M8.2 7.5h7.6M8.2 16.5h7.6M7 12h10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" opacity=".8"/>
+          </svg>
+        </span>
+        <span class="brand__text">
+          <strong>GENOME FIREWALL</strong>
+          <span class="brand__version">v2.0</span>
+        </span>
+      </a>
+
+      <nav class="nav" aria-label="Primary">
+        <a href="#/" data-route-link="/" class="nav__link">Overview</a>
+        <a href="#/scan" data-route-link="/scan" class="nav__link">Analyse</a>
+        <a href="#/report" data-route-link="/report" class="nav__link">Report</a>
+      </nav>
+
+      <div class="topbar__actions">
+        <button type="button" class="engine-chip" id="engine-chip" title="Engine status">
+          <span class="dot" id="engine-dot"></span>
+          <span class="engine-chip__text" id="engine-text">connecting…</span>
+        </button>
+        <button type="button" class="btn btn--ghost btn--icon" id="palette-open" aria-label="Open command palette (Ctrl K)" title="Command palette · Ctrl K">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3z"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main id="main" tabindex="-1"></main>
+
+  <footer class="footer" id="footer">
+    <div class="footer__inner">
+      <div class="footer__brand">
+        <span class="brand__mark brand__mark--sm" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M7 3c0 4 10 5 10 9s-10 5-10 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M17 3c0 4-10 5-10 9s10 5 10 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" opacity=".55"/></svg>
+        </span>
+        <div>
+          <div class="footer__title">Genome Firewall</div>
+          <p class="footer__note">Defensive decision support only. Every result must be confirmed by standard laboratory antimicrobial susceptibility testing before clinical use.</p>
+        </div>
+      </div>
+      <div class="footer__meta">
+        <div><span>Engine</span><b id="footer-engine">C++14 · native threads</b></div>
+        <div><span>Index</span><b id="footer-index">4-ary trie · Bloom filter</b></div>
+        <div><span>Model</span><b>Logistic regression</b></div>
+        <div><span>Source</span><b><a href="https://github.com/FROSTY-MUG/Genome_Firewall" target="_blank" rel="noopener">FROSTY-MUG/Genome_Firewall</a></b></div>
+      </div>
+    </div>
+  </footer>
+
+  <div class="toasts" id="toasts" aria-live="polite" aria-atomic="false"></div>
+
+  <nav class="mobile-tabs" aria-label="Mobile navigation">
+    <a href="#/" data-route-link="/" class="mobile-tab">
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 3v5.2c0 4.4-3 8-7 9.8-4-1.8-7-5.4-7-9.8V6l7-3z"/></svg>
+      <span>Overview</span>
+    </a>
+    <a href="#/scan" data-route-link="/scan" class="mobile-tab">
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/></svg>
+      <span>Analyse</span>
+    </a>
+    <a href="#/report" data-route-link="/report" class="mobile-tab">
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5z"/><path d="M14 3v5h5"/></svg>
+      <span>Report</span>
+    </a>
+  </nav>
+
+  <dialog class="palette" id="palette" aria-label="Command palette">
+    <div class="palette__search">
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input type="text" id="palette-input" placeholder="Search actions…" autocomplete="off" spellcheck="false" aria-label="Search actions" />
+      <kbd>esc</kbd>
+    </div>
+    <div class="palette__list" id="palette-list" role="listbox" aria-label="Actions"></div>
+    <div class="palette__foot">
+      <span><kbd>↑</kbd><kbd>↓</kbd> navigate</span>
+      <span><kbd>↵</kbd> run</span>
+      <span id="palette-count"></span>
+    </div>
+  </dialog>
+
+  <div class="boot" id="boot" aria-hidden="true">
+    <div class="boot__mark"></div>
+  </div>
+
+  <noscript>
+    <div style="position:fixed;inset:auto 16px 16px;z-index:100;padding:14px 16px;border:1px solid #2a3a36;border-radius:10px;background:#0b1215;color:#e8f0ed;font:13px/1.5 system-ui,sans-serif">
+      <b>JavaScript is required.</b> The Genome Firewall console runs entirely in your browser against a local API.
+    </div>
+  </noscript>
+
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>
