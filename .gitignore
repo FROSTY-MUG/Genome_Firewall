@@ -23,3 +23,6 @@ data/shortname_*.tsv
 .idea/
 .DS_Store
 Thumbs.db
+
+# Compiled engine (Unix)
+/genome_firewall

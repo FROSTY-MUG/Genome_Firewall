@@ -94,13 +94,13 @@ void AMRDatabase::loadFromFile(const std::string& filepath, AMRTrie& trie) {
 
     if (actualPath.find(".fasta") != std::string::npos || actualPath.find(".fsa") != std::string::npos) {
         parser = std::make_unique<FastaDBParser>();
-        std::cout << "[*] Routing to Native FASTA Parser for: " << actualPath << "\n";
+        std::cerr << "[*] Routing to Native FASTA Parser for: " << actualPath << "\n";
     } else if (actualPath.find(".tsv") != std::string::npos) {
         parser = std::make_unique<TSVParser>();
-        std::cout << "[*] Routing to Native TSV Parser for: " << actualPath << "\n";
+        std::cerr << "[*] Routing to Native TSV Parser for: " << actualPath << "\n";
     } else {
         parser = std::make_unique<CSVParser>();
-        std::cout << "[*] Routing to Native CSV Parser for: " << actualPath << "\n";
+        std::cerr << "[*] Routing to Native CSV Parser for: " << actualPath << "\n";
     }
 
     auto newRecords = parser->parse(actualPath);
@@ -130,7 +130,7 @@ void AMRDatabase::loadFromFile(const std::string& filepath, AMRTrie& trie) {
         }
         ++added;
     }
-    std::cout << "[+] Successfully ingested " << added << " markers ("
+    std::cerr << "[+] Successfully ingested " << added << " markers ("
               << kmerTotal << " unique k-mers) into the Trie Arena.\n";
 }
 

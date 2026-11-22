@@ -136,7 +136,7 @@ Genome_Firewall/
 ├── data/                 # Curated AMR markers & test genomes
 │   ├── markers.csv          # 10 curated core markers
 │   ├── markers_card_top.csv # 455 real CARD reference markers
-│   ├── markers_large.csv    # 53 multi-class markers
+│   ├── markers_large.csv    # 54 multi-class markers
 │   ├── sample.fasta         # E. coli K12 base genome
 │   ├── sample_real.fasta    # Multidrug-resistant E. coli K88 demo
 │   └── snps.txt             # Validated SNP mutation catalog
@@ -159,3 +159,49 @@ Genome_Firewall/
 ├── .gitignore            # Clean git hygiene rules
 └── README.md             # Project documentation & presentation
 ```
+
+---
+
+## 4. Web Console Layer (v2.0 addition)
+
+The engine remains a standalone CLI. The web layer is an optional, local
+transport around it — no part of the scoring pipeline is reimplemented in
+JavaScript.
+
+```
+Browser (web/)
+   │  POST /api/scan/stream   { fastaContent, db, fuzzy, async, confidence }
+   ▼
+api/server.js  (Node stdlib only)
+   │  1. validate FASTA + whitelist catalogue
+   │  2. write 0600 temp file (os.tmpdir, random name)
+   │  3. spawn genome_firewall --json …
+   ▼
+C++ engine (stdout = JSON, stderr = diagnostics)
+   │
+   ├── stderr line  ──► NDJSON {"type":"log"}    ──► live console
+   ├── stage markers ──► NDJSON {"type":"stage"} ──► stage timeline
+   └── stdout JSON   ──► NDJSON {"type":"result"} ──► report view
+```
+
+### Design decisions
+
+1. **stdout/stderr separation.** All human diagnostics were moved to `stderr`
+   so `--json` output can be consumed without log-line filtering. This also
+   makes the CLI pipeline-friendly (`genome_firewall --json … | jq`).
+2. **NDJSON over SSE.** Progress is a POST request, so `fetch` +
+   `ReadableStream` is simpler than `EventSource` (which is GET-only) and works
+   with abort signals. Aborting the request kills the child process.
+3. **No framework runtime.** Views are plain DOM factories. The browser parses
+   three small modules on load; there is no hydration or bundling step, which
+   matters on low-end Android where the engine may also be running.
+4. **Trust boundary.** The browser never supplies a filesystem path. Catalogue
+   IDs are resolved server-side against a fixed whitelist; uploads get random
+   names; only the selected catalogue and a temp path reach `argv`.
+5. **Report schema v2.** The JSON report carries `engine`, `input`, `database`,
+   `telemetry`, `summary` and `predictions`, plus `request` metadata added by
+   the server. `schemaVersion` is bumped on breaking changes; the UI tolerates
+   missing optional fields.
+6. **Confidence gate is real.** `--confidence` now downgrades calls whose
+   scaled confidence falls below the threshold to `NO-CALL` instead of merely
+   being displayed.
